@@ -1,0 +1,195 @@
+<html>
+
+<head>
+<style type="text/css">
+.knitr .inline {
+  background-color: #f7f7f7;
+  border:solid 1px #B0B0B0;
+}
+.error {
+	font-weight: bold;
+	color: #FF0000;
+}
+.warning {
+	font-weight: bold;
+}
+.message {
+	font-style: italic;
+}
+.source, .output, .warning, .error, .message {
+	padding: 0 1em;
+  border:solid 1px #F7F7F7;
+}
+.source {
+  background-color: #f5f5f5;
+}
+.rimage .left {
+  text-align: left;
+}
+.rimage .right {
+  text-align: right;
+}
+.rimage .center {
+  text-align: center;
+}
+.hl.num {
+  color: #AF0F91;
+}
+.hl.str {
+  color: #317ECC;
+}
+.hl.com {
+  color: #AD95AF;
+  font-style: italic;
+}
+.hl.opt {
+  color: #000000;
+}
+.hl.std {
+  color: #585858;
+}
+.hl.kwa {
+  color: #295F94;
+  font-weight: bold;
+}
+.hl.kwb {
+  color: #B05A65;
+}
+.hl.kwc {
+  color: #55aa55;
+}
+.hl.kwd {
+  color: #BC5A65;
+  font-weight: bold;
+}
+</style>
+<title>Practical Machine Learning: Course Project</title>
+</head>
+
+<body>
+
+<p>This R HTML document contains the report for the "Prediction Assignment Writeup" task of the Practical Machine Learning course. </p>
+
+<p> The goal of the task is to build a predictive model that correctly identifies the activity quality as measured by activity monitors, which is this case consist in accelerometers placed on the belt, forearm, arm, and dumbell of 6 participants.</p>
+
+<p>We start with loading the data we'll use to train and test a predictive model from the appropriate .csv files. We'll do some preprocessing by removing variables that: don't exist on both sets or that have zero variance on the test set (which in this case means all variables that always present a NaN for every instance),   or are date/time variables, or are unique identifiers.</p>
+
+<div class="chunk" id="unnamed-chunk-1"><div class="rcode"><div class="source"><pre class="knitr r"><span class="hl kwd">require</span><span class="hl std">(caret)</span>
+</pre></div>
+<div class="message"><pre class="knitr r">## Loading required package: caret
+## Loading required package: lattice
+## Loading required package: ggplot2
+</pre></div>
+<div class="source"><pre class="knitr r"><span class="hl std">train.data</span> <span class="hl kwb">&lt;-</span> <span class="hl kwd">read.csv</span><span class="hl std">(</span><span class="hl str">&quot;pml-training.csv&quot;</span><span class="hl std">,</span> <span class="hl kwc">sep</span><span class="hl std">=</span><span class="hl str">&quot;,&quot;</span><span class="hl std">)</span>
+<span class="hl std">test.data</span> <span class="hl kwb">&lt;-</span> <span class="hl kwd">read.csv</span><span class="hl std">(</span><span class="hl str">&quot;pml-testing.csv&quot;</span><span class="hl std">,</span> <span class="hl kwc">sep</span><span class="hl std">=</span><span class="hl str">&quot;,&quot;</span><span class="hl std">)</span>
+
+<span class="hl std">train.data</span><span class="hl opt">$</span><span class="hl std">cvtd_timestamp</span> <span class="hl kwb">&lt;-</span> <span class="hl kwa">NULL</span>
+<span class="hl std">test.data</span><span class="hl opt">$</span><span class="hl std">cvtd_timestamp</span> <span class="hl kwb">&lt;-</span> <span class="hl kwa">NULL</span>
+<span class="hl std">test.data</span><span class="hl opt">$</span><span class="hl std">problem_id</span> <span class="hl kwb">&lt;-</span> <span class="hl kwa">NULL</span>
+<span class="hl std">train.data</span><span class="hl opt">$</span><span class="hl std">X</span> <span class="hl kwb">&lt;-</span> <span class="hl kwa">NULL</span>
+<span class="hl std">test.data</span><span class="hl opt">$</span><span class="hl std">X</span> <span class="hl kwb">&lt;-</span> <span class="hl kwa">NULL</span>
+
+<span class="hl std">nzv.test</span> <span class="hl kwb">&lt;-</span> <span class="hl kwd">nearZeroVar</span><span class="hl std">(test.data,</span> <span class="hl kwc">saveMetrics</span><span class="hl std">=</span><span class="hl num">TRUE</span><span class="hl std">)</span>
+<span class="hl std">test.data</span> <span class="hl kwb">&lt;-</span> <span class="hl std">test.data[,</span> <span class="hl opt">-</span><span class="hl kwd">which</span><span class="hl std">(nzv.test</span><span class="hl opt">$</span><span class="hl std">zeroVar</span> <span class="hl opt">==</span> <span class="hl num">TRUE</span><span class="hl std">)]</span>
+<span class="hl std">train.data</span> <span class="hl kwb">&lt;-</span> <span class="hl std">train.data[,</span> <span class="hl kwd">c</span><span class="hl std">(</span><span class="hl str">&quot;classe&quot;</span><span class="hl std">,</span><span class="hl kwd">names</span><span class="hl std">(test.data))]</span>
+</pre></div>
+</div></div>
+
+<p>Next, let's use the caret package subset the train data into a training and a testing portions to estimate the out of sample error. The training portion will contain 80% of the data, which will be randomly subsetted based on the "classe" variable. This procedure will preserve the overall distribution of the data. </p>
+
+<div class="chunk" id="unnamed-chunk-2"><div class="rcode"><div class="source"><pre class="knitr r"><span class="hl kwd">require</span><span class="hl std">(caret)</span>
+<span class="hl kwd">set.seed</span><span class="hl std">(</span><span class="hl num">999</span><span class="hl std">)</span>
+<span class="hl std">trainIndex</span> <span class="hl kwb">&lt;-</span> <span class="hl kwd">createDataPartition</span><span class="hl std">(train.data</span><span class="hl opt">$</span><span class="hl std">classe,</span> <span class="hl kwc">p</span> <span class="hl std">=</span> <span class="hl num">.8</span><span class="hl std">,</span>
+                                  <span class="hl kwc">list</span> <span class="hl std">=</span> <span class="hl num">FALSE</span><span class="hl std">,</span>
+                                  <span class="hl kwc">times</span> <span class="hl std">=</span> <span class="hl num">1</span><span class="hl std">)</span>
+<span class="hl std">training</span> <span class="hl kwb">&lt;-</span> <span class="hl std">train.data[ trainIndex,]</span>
+<span class="hl std">testing</span>  <span class="hl kwb">&lt;-</span> <span class="hl std">train.data[</span><span class="hl opt">-</span><span class="hl std">trainIndex,]</span>
+</pre></div>
+</div></div>
+
+<p>To estimate the out of sample error, we'll build a model on the training subset with the random forest algorithm and assess its performance on the testing portion. Because this is a classification problem, the performance of the model is assessed with the Accuracy measure (that is, the proportion of samples in the data set that the algorithm correctly predicts).</p>
+
+<div class="chunk" id="unnamed-chunk-3"><div class="rcode"><div class="source"><pre class="knitr r"><span class="hl kwd">require</span><span class="hl std">(randomForest)</span>
+</pre></div>
+<div class="message"><pre class="knitr r">## Loading required package: randomForest
+## randomForest 4.6-10
+## Type rfNews() to see new features/changes/bug fixes.
+</pre></div>
+<div class="source"><pre class="knitr r"><span class="hl std">model</span> <span class="hl kwb">&lt;-</span> <span class="hl kwd">randomForest</span><span class="hl std">(classe</span><span class="hl opt">~</span><span class="hl std">.,</span> <span class="hl kwc">data</span> <span class="hl std">= training)</span>
+<span class="hl std">model</span>
+</pre></div>
+<div class="output"><pre class="knitr r">## 
+## Call:
+##  randomForest(formula = classe ~ ., data = training) 
+##                Type of random forest: classification
+##                      Number of trees: 500
+## No. of variables tried at each split: 7
+## 
+##         OOB estimate of  error rate: 0.07%
+## Confusion matrix:
+##      A    B    C    D    E  class.error
+## A 4464    0    0    0    0 0.0000000000
+## B    2 3036    0    0    0 0.0006583278
+## C    0    3 2734    1    0 0.0014609204
+## D    0    0    4 2568    1 0.0019432569
+## E    0    0    0    0 2886 0.0000000000
+</pre></div>
+</div></div>
+
+<p>The last command in the previous code block shows the confusion matrix and an OOB estimate of error rate of 0.07%.</p>
+
+
+<p>Now let's repeat the same procedure with 10-fold cross validation over the entire train data set, and then obtain the predictions for the test data set. We'll still use randomForest, only this time we'll build several models using caret's train function and pick the one with the best accuracy. Also notice that we're centering, scaling and applying PCA to the variables with the preProcess command.</p>
+
+<div class="chunk" id="unnamed-chunk-4"><div class="rcode"><div class="source"><pre class="knitr r"><span class="hl kwd">require</span><span class="hl std">(randomForest)</span>
+<span class="hl kwd">require</span><span class="hl std">(caret)</span>
+<span class="hl std">fitControl</span> <span class="hl kwb">&lt;-</span> <span class="hl kwd">trainControl</span><span class="hl std">(</span>
+  <span class="hl kwc">method</span> <span class="hl std">=</span> <span class="hl str">&quot;cv&quot;</span><span class="hl std">,</span>
+  <span class="hl kwc">verboseIter</span><span class="hl std">=</span><span class="hl num">FALSE</span>
+<span class="hl std">)</span>
+
+<span class="hl std">rfGrid</span> <span class="hl kwb">&lt;-</span> <span class="hl kwd">expand.grid</span><span class="hl std">(</span><span class="hl kwc">mtry</span><span class="hl std">=</span><span class="hl kwd">c</span><span class="hl std">(</span><span class="hl num">2</span><span class="hl std">,</span><span class="hl num">3</span><span class="hl std">,</span><span class="hl num">4</span><span class="hl std">))</span>
+<span class="hl std">rfFit</span> <span class="hl kwb">&lt;-</span> <span class="hl kwd">train</span><span class="hl std">(classe</span><span class="hl opt">~</span> <span class="hl std">.,</span> <span class="hl kwc">data</span> <span class="hl std">= train.data,</span>
+               <span class="hl kwc">method</span> <span class="hl std">=</span> <span class="hl str">&quot;rf&quot;</span><span class="hl std">,</span>
+               <span class="hl kwc">preProcess</span> <span class="hl std">=</span> <span class="hl kwd">c</span><span class="hl std">(</span><span class="hl str">&quot;center&quot;</span><span class="hl std">,</span><span class="hl str">&quot;scale&quot;</span><span class="hl std">,</span><span class="hl str">&quot;pca&quot;</span><span class="hl std">),</span>
+               <span class="hl kwc">trControl</span> <span class="hl std">= fitControl,</span>
+               <span class="hl kwc">tuneGrid</span> <span class="hl std">= rfGrid</span>
+               <span class="hl std">)</span>
+</pre></div>
+</div></div>
+
+<p>If we run the following command, the output will be a summary of the random forest models. The best performance, ie, the best accuracy corresponds to the model with value of parameter mtry equal to 2, which yields an accuracy of 98.5% or an accuracy error of 1.5%. </p>
+
+<div class="chunk" id="unnamed-chunk-5"><div class="rcode"><div class="source"><pre class="knitr r"><span class="hl std">rfFit</span>
+</pre></div>
+<div class="output"><pre class="knitr r">## Random Forest 
+## 
+## 19622 samples
+##    56 predictor
+##     5 classes: 'A', 'B', 'C', 'D', 'E' 
+## 
+## Pre-processing: centered, scaled, principal component signal extraction 
+## Resampling: Cross-Validated (10 fold) 
+## 
+## Summary of sample sizes: 17659, 17659, 17660, 17659, 17660, 17661, ... 
+## 
+## Resampling results across tuning parameters:
+## 
+##   mtry  Accuracy   Kappa      Accuracy SD  Kappa SD   
+##   2     0.9860872  0.9824013  0.002149063  0.002717456
+##   3     0.9855264  0.9816913  0.002835152  0.003586544
+##   4     0.9859339  0.9822074  0.002271107  0.002873082
+## 
+## Accuracy was used to select the optimal model using  the largest value.
+## The final value used for the model was mtry = 2.
+</pre></div>
+</div></div>
+
+<p>In order to obtain the predictions submitted to the Coursera course webpage, we simply invoke the predict command over the test set.</p>
+
+<div class="chunk" id="unnamed-chunk-6"><div class="rcode"><div class="source"><pre class="knitr r"><span class="hl std">predictions</span> <span class="hl kwb">&lt;-</span> <span class="hl kwd">predict</span><span class="hl std">(rfFit, test.data)</span>
+</pre></div>
+</div></div>
+
+</body>
+</html>
